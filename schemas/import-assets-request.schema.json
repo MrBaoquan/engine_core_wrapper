@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://engine-core-wrapper.local/schemas/import-assets-request.schema.json",
+  "title": "ImportAssetsRequest",
+  "type": "object",
+  "required": ["requestId", "overwrite", "assets"],
+  "properties": {
+    "requestId": {
+      "type": "string"
+    },
+    "overwrite": {
+      "type": "boolean"
+    },
+    "assets": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["sourcePath", "assetType", "targetSubdirectory"],
+        "properties": {
+          "sourcePath": {
+            "type": "string"
+          },
+          "assetType": {
+            "type": "string",
+            "enum": ["audio"]
+          },
+          "targetSubdirectory": {
+            "type": "string"
+          },
+          "displayName": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}

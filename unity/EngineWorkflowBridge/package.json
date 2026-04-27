@@ -1,0 +1,10 @@
+{
+  "name": "com.aicoreworks.engineworkflowbridge",
+  "version": "0.1.0",
+  "displayName": "Engine Workflow Bridge",
+  "description": "Editor-side bridge plugin that exposes a localhost protocol for asset import automation.",
+  "unity": "2021.3",
+  "author": {
+    "name": "AI CoreWorks"
+  }
+}

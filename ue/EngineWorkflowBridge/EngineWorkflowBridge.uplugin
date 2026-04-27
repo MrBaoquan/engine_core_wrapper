@@ -1,0 +1,19 @@
+{
+  "FileVersion": 3,
+  "Version": 1,
+  "VersionName": "0.1.0",
+  "FriendlyName": "Engine Workflow Bridge",
+  "Description": "Editor-side bridge plugin that exposes a localhost protocol for asset import automation.",
+  "Category": "Scripting",
+  "CreatedBy": "AI CoreWorks",
+  "CanContainContent": false,
+  "IsBetaVersion": true,
+  "Installed": false,
+  "Modules": [
+    {
+      "Name": "EngineWorkflowBridge",
+      "Type": "Editor",
+      "LoadingPhase": "PostEngineInit"
+    }
+  ]
+}

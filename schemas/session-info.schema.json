@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://engine-core-wrapper.local/schemas/session-info.schema.json",
+  "title": "SessionInfo",
+  "type": "object",
+  "required": [
+    "protocolVersion",
+    "projectId",
+    "engineType",
+    "projectName",
+    "projectPath",
+    "processId",
+    "endpoint",
+    "capabilities",
+    "status",
+    "lastUpdatedUtc"
+  ],
+  "properties": {
+    "protocolVersion": {
+      "type": "string"
+    },
+    "projectId": {
+      "type": "string"
+    },
+    "engineType": {
+      "type": "string",
+      "enum": ["unity", "unreal"]
+    },
+    "projectName": {
+      "type": "string"
+    },
+    "projectPath": {
+      "type": "string"
+    },
+    "processId": {
+      "type": "integer"
+    },
+    "endpoint": {
+      "type": "string"
+    },
+    "capabilities": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "status": {
+      "type": "string",
+      "enum": ["idle", "busy", "error"]
+    },
+    "lastUpdatedUtc": {
+      "type": "string",
+      "format": "date-time"
+    }
+  }
+}

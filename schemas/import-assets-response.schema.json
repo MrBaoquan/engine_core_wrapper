@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://engine-core-wrapper.local/schemas/import-assets-response.schema.json",
+  "title": "ImportAssetsResponse",
+  "type": "object",
+  "required": ["requestId", "success", "results"],
+  "properties": {
+    "requestId": {
+      "type": "string"
+    },
+    "success": {
+      "type": "boolean"
+    },
+    "results": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["sourcePath", "status", "message"],
+        "properties": {
+          "sourcePath": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": ["imported", "skipped", "failed"]
+          },
+          "engineAssetPath": {
+            "type": ["string", "null"]
+          },
+          "engineObjectId": {
+            "type": ["string", "null"]
+          },
+          "message": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}
