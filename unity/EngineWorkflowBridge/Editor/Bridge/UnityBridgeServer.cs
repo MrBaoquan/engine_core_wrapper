@@ -20,6 +20,7 @@ namespace EngineWorkflowBridge
         private static string _projectId;
         private static int _port;
         private static volatile string _status = "idle";
+        private static readonly TimeSpan HeartbeatInterval = TimeSpan.FromSeconds(2);
 
         static UnityBridgeServer()
         {
@@ -35,6 +36,7 @@ namespace EngineWorkflowBridge
                 return;
             }
 
+            UnityBridgePaths.Initialize();
             _projectId = UnityBridgePaths.MakeProjectId();
             _port = BindAvailablePort();
             _listener = new HttpListener();
@@ -44,6 +46,8 @@ namespace EngineWorkflowBridge
             _registry = new UnitySessionRegistry(_projectId, $"http://127.0.0.1:{_port}");
             _registry.Write(_status);
             Task.Run(() => ListenLoop(_cancellation.Token));
+            Task.Run(() => HeartbeatLoop(_cancellation.Token));
+            UnityBridgeLog.Info($"Server started projectId='{_projectId}' endpoint='http://127.0.0.1:{_port}'");
             Debug.Log($"[EngineWorkflowBridge] Listening on port {_port}");
         }
 
@@ -90,6 +94,26 @@ namespace EngineWorkflowBridge
             }
         }
 
+        private static async Task HeartbeatLoop(CancellationToken cancellationToken)
+        {
+            while (!cancellationToken.IsCancellationRequested)
+            {
+                try
+                {
+                    _registry?.Write(_status);
+                    await Task.Delay(HeartbeatInterval, cancellationToken);
+                }
+                catch (OperationCanceledException)
+                {
+                    break;
+                }
+                catch (Exception ex)
+                {
+                    Debug.LogWarning($"[EngineWorkflowBridge] Heartbeat warning: {ex.Message}");
+                }
+            }
+        }
+
         private static void HandleRequest(HttpListenerContext context)
         {
             try
@@ -113,6 +137,7 @@ namespace EngineWorkflowBridge
 
                 if (context.Request.HttpMethod == "POST" && path == "/api/v1/import-assets")
                 {
+                    UnityBridgeLog.Info("POST /api/v1/import-assets received.");
                     string payload;
                     using (
                         var reader = new StreamReader(
@@ -123,6 +148,7 @@ namespace EngineWorkflowBridge
                     {
                         payload = reader.ReadToEnd();
                     }
+                    UnityBridgeLog.Info("Import payload: " + payload);
 
                     var request = JsonUtility.FromJson<ImportAssetsRequest>(payload);
                     if (request == null || request.assets == null || request.assets.Count == 0)
@@ -131,62 +157,67 @@ namespace EngineWorkflowBridge
                         return;
                     }
 
-                    _status = "busy";
-                    _registry.Write(_status);
                     var response = new ImportAssetsResponse
                     {
                         requestId = request.requestId,
                         success = true
                     };
 
-                    foreach (var asset in request.assets)
+                    _status = "busy";
+                    _registry.Write(_status);
+                    try
                     {
-                        ImportAssetResult result;
-                        try
+                        foreach (var asset in request.assets)
                         {
-                            if (
-                                !string.Equals(
-                                    asset.assetType,
-                                    "audio",
-                                    StringComparison.OrdinalIgnoreCase
+                            ImportAssetResult result;
+                            try
+                            {
+                                if (
+                                    !string.Equals(
+                                        asset.assetType,
+                                        "audio",
+                                        StringComparison.OrdinalIgnoreCase
+                                    )
                                 )
-                            )
+                                {
+                                    result = new ImportAssetResult
+                                    {
+                                        sourcePath = asset.sourcePath,
+                                        status = "failed",
+                                        message = "Unsupported assetType"
+                                    };
+                                }
+                                else
+                                {
+                                    result = UnityAssetImporter.ImportAudio(asset, request.overwrite);
+                                }
+                            }
+                            catch (Exception ex)
                             {
                                 result = new ImportAssetResult
                                 {
                                     sourcePath = asset.sourcePath,
                                     status = "failed",
-                                    message = "Unsupported assetType"
+                                    message = ex.Message
                                 };
                             }
-                            else
+
+                            if (result.status == "failed")
                             {
-                                result = UnityMainThreadDispatcher.Run(
-                                    () => UnityAssetImporter.ImportAudio(asset, request.overwrite)
-                                );
+                                response.success = false;
                             }
-                        }
-                        catch (Exception ex)
-                        {
-                            result = new ImportAssetResult
-                            {
-                                sourcePath = asset.sourcePath,
-                                status = "failed",
-                                message = ex.Message
-                            };
-                        }
 
-                        if (result.status == "failed")
-                        {
-                            response.success = false;
+                            response.results.Add(result);
                         }
-
-                        response.results.Add(result);
+                    }
+                    finally
+                    {
+                        _status = response.success ? "idle" : "error";
+                        _registry.Write(_status);
                     }
 
-                    _status = response.success ? "idle" : "error";
-                    _registry.Write(_status);
                     WriteJson(context.Response, 200, JsonUtility.ToJson(response));
+                    UnityBridgeLog.Info("Import response success=" + response.success + " resultCount=" + response.results.Count);
                     return;
                 }
 
@@ -194,6 +225,9 @@ namespace EngineWorkflowBridge
             }
             catch (Exception ex)
             {
+                _status = "error";
+                _registry?.Write(_status);
+                UnityBridgeLog.Error("Request handling failed: " + ex);
                 Debug.LogError($"[EngineWorkflowBridge] Request handling failed: {ex}");
                 try
                 {

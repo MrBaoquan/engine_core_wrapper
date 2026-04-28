@@ -18,6 +18,7 @@ public class EngineWorkflowBridge : ModuleRules
                 "HTTPServer",
                 "Json",
                 "JsonUtilities",
+                "Sockets",
                 "Slate",
                 "SlateCore",
                 "UnrealEd"

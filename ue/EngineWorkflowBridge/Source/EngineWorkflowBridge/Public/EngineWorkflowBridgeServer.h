@@ -1,6 +1,8 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Containers/Ticker.h"
+#include "HAL/CriticalSection.h"
 #include "HttpRouteHandle.h"
 #include "HttpResultCallback.h"
 
@@ -48,11 +50,13 @@ private:
         FString Message;
     };
 
-    bool HandleHealth(const FHttpServerRequest& Request, const FHttpResultCallback& OnComplete);
-    bool HandleSession(const FHttpServerRequest& Request, const FHttpResultCallback& OnComplete);
-    bool HandleImportAssets(const FHttpServerRequest& Request, const FHttpResultCallback& OnComplete);
+    bool HandleHealth(const FHttpServerRequest &Request, const FHttpResultCallback &OnComplete);
+    bool HandleSession(const FHttpServerRequest &Request, const FHttpResultCallback &OnComplete);
+    bool HandleImportAssets(const FHttpServerRequest &Request, const FHttpResultCallback &OnComplete);
 
     bool TryBindPort();
+    bool IsPortAvailable(uint32 CandidatePort) const;
+    bool HandleHeartbeat(float DeltaTime);
     void WriteDiscoveryFile() const;
     void DeleteDiscoveryFile() const;
     FSessionInfo BuildSessionInfo() const;
@@ -60,17 +64,24 @@ private:
     FString GetDiscoveryFilePath() const;
     FString MakeProjectId() const;
     FString MakeTimestampUtc() const;
-    FString NormalizeTargetSubdirectory(const FString& Input) const;
-    TSharedRef<class FJsonObject> SessionToJsonObject(const FSessionInfo& Session) const;
-    TSharedRef<class FJsonObject> ResultToJsonObject(const FImportAssetResult& Result) const;
-    FImportAssetResult ImportAudio(const FImportAssetItem& Item, bool bOverwrite);
-    void SendJson(const FHttpResultCallback& OnComplete, int32 StatusCode, const TSharedRef<class FJsonObject>& Payload) const;
+    FString GetLogPath() const;
+    void WriteLog(const FString &Message) const;
+    FString GetStatus() const;
+    void SetStatus(const FString &NewStatus);
+    FString NormalizeTargetSubdirectory(const FString &Input) const;
+    TSharedRef<class FJsonObject> SessionToJsonObject(const FSessionInfo &Session) const;
+    TSharedRef<class FJsonObject> ResultToJsonObject(const FImportAssetResult &Result) const;
+    FImportAssetResult ImportAudio(const FImportAssetItem &Item, bool bOverwrite);
+    void SendJson(const FHttpResultCallback &OnComplete, int32 StatusCode, const TSharedRef<class FJsonObject> &Payload) const;
 
 private:
     FHttpRouteHandle HealthRouteHandle;
     FHttpRouteHandle SessionRouteHandle;
     FHttpRouteHandle ImportRouteHandle;
+    FTSTicker::FDelegateHandle HeartbeatTickerHandle;
     TSharedPtr<IHttpRouter> Router;
+    mutable FCriticalSection DiscoveryFileLock;
+    mutable FCriticalSection StateLock;
     uint32 Port = 0;
     FString ProjectId;
     FString Endpoint;

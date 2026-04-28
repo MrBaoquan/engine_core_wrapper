@@ -6,9 +6,11 @@ namespace EngineWorkflowBridge
 {
     internal static class UnityBridgePaths
     {
+        private static string _projectPath;
+
         public const string ProtocolVersion = "1.0";
         public const string EngineType = "unity";
-        public const string ImportRoot = "Assets/WorkflowImports";
+        public const string ImportRoot = "Assets/ArtAssets";
 
         public static string DiscoveryDirectory
         {
@@ -21,8 +23,23 @@ namespace EngineWorkflowBridge
             }
         }
 
-        public static string ProjectPath =>
-            Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
+        public static string ProjectPath
+        {
+            get
+            {
+                if (string.IsNullOrEmpty(_projectPath))
+                {
+                    throw new InvalidOperationException("UnityBridgePaths is not initialized.");
+                }
+
+                return _projectPath;
+            }
+        }
+
+        public static void Initialize()
+        {
+            _projectPath = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
+        }
 
         public static string MakeProjectId()
         {

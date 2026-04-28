@@ -22,6 +22,20 @@ namespace EngineWorkflowBridge
 
         public static ImportAssetResult ImportAudio(ImportAssetItem item, bool overwrite)
         {
+            UnityBridgeLog.Info("ImportAudio request source='" + item.sourcePath + "' targetSubdirectory='" + item.targetSubdirectory + "' displayName='" + item.displayName + "'");
+            var result = CopyAudioIntoProject(item, overwrite);
+            if (string.Equals(result.status, "imported", StringComparison.OrdinalIgnoreCase)
+                && !string.IsNullOrWhiteSpace(result.engineAssetPath))
+            {
+                UnityBridgeLog.Info("Copied audio to '" + result.engineAssetPath + "'; queueing AssetDatabase refresh.");
+                UnityMainThreadDispatcher.Post(() => RefreshImportedAudio(result.engineAssetPath));
+            }
+
+            return result;
+        }
+
+        private static ImportAssetResult CopyAudioIntoProject(ImportAssetItem item, bool overwrite)
+        {
             var result = new ImportAssetResult
             {
                 sourcePath = item.sourcePath,
@@ -78,17 +92,24 @@ namespace EngineWorkflowBridge
             }
 
             File.Copy(item.sourcePath, absoluteTargetPath, overwrite);
+            UnityBridgeLog.Info("Copied file source='" + item.sourcePath + "' target='" + absoluteTargetPath + "'");
+
+            result.status = "imported";
+            result.engineAssetPath = assetPath;
+            result.engineObjectId = string.Empty;
+            result.message = "Copied into Unity project; AssetDatabase refresh queued";
+            return result;
+        }
+
+        private static void RefreshImportedAudio(string assetPath)
+        {
+            UnityBridgeLog.Info("Refreshing AssetDatabase for '" + assetPath + "'");
             AssetDatabase.ImportAsset(
                 assetPath,
                 ImportAssetOptions.ForceSynchronousImport | ImportAssetOptions.ForceUpdate
             );
             AssetDatabase.Refresh(ImportAssetOptions.ForceSynchronousImport);
-
-            result.status = "imported";
-            result.engineAssetPath = assetPath;
-            result.engineObjectId = AssetDatabase.AssetPathToGUID(assetPath);
-            result.message = "Imported successfully";
-            return result;
+            UnityBridgeLog.Info("AssetDatabase refresh completed for '" + assetPath + "'");
         }
 
         private static string BuildTargetFileName(ImportAssetItem item, string extension)
