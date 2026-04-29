@@ -5,6 +5,7 @@
 #include "HAL/CriticalSection.h"
 #include "HttpRouteHandle.h"
 #include "HttpResultCallback.h"
+#include "Runtime/Launch/Resources/Version.h"
 
 class IHttpRouter;
 struct FHttpServerRequest;
@@ -78,7 +79,11 @@ private:
     FHttpRouteHandle HealthRouteHandle;
     FHttpRouteHandle SessionRouteHandle;
     FHttpRouteHandle ImportRouteHandle;
+#if ENGINE_MAJOR_VERSION >= 5
     FTSTicker::FDelegateHandle HeartbeatTickerHandle;
+#else
+    FDelegateHandle HeartbeatTickerHandle;
+#endif
     TSharedPtr<IHttpRouter> Router;
     mutable FCriticalSection DiscoveryFileLock;
     mutable FCriticalSection StateLock;

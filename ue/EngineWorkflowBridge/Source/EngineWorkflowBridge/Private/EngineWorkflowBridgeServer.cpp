@@ -23,7 +23,12 @@
 #include "SocketSubsystem.h"
 #include "Sockets.h"
 #include "UObject/Object.h"
-#include "UObject/StrongObjectPtr.h"
+
+#if ENGINE_MAJOR_VERSION >= 5
+#define ENGINE_WORKFLOW_TICKER FTSTicker::GetCoreTicker()
+#else
+#define ENGINE_WORKFLOW_TICKER FTicker::GetCoreTicker()
+#endif
 
 FEngineWorkflowBridgeServer::FEngineWorkflowBridgeServer()
 {
@@ -49,7 +54,7 @@ void FEngineWorkflowBridgeServer::Start()
     WriteDiscoveryFile();
     if (!HeartbeatTickerHandle.IsValid())
     {
-        HeartbeatTickerHandle = FTSTicker::GetCoreTicker().AddTicker(
+        HeartbeatTickerHandle = ENGINE_WORKFLOW_TICKER.AddTicker(
             FTickerDelegate::CreateRaw(this, &FEngineWorkflowBridgeServer::HandleHeartbeat),
             2.0f);
     }
@@ -62,7 +67,7 @@ void FEngineWorkflowBridgeServer::Stop()
     WriteLog(TEXT("Stop requested endpoint=") + Endpoint);
     if (HeartbeatTickerHandle.IsValid())
     {
-        FTSTicker::GetCoreTicker().RemoveTicker(HeartbeatTickerHandle);
+        ENGINE_WORKFLOW_TICKER.RemoveTicker(HeartbeatTickerHandle);
         HeartbeatTickerHandle.Reset();
     }
 
@@ -105,7 +110,7 @@ bool FEngineWorkflowBridgeServer::TryBindPort()
             continue;
         }
 
-        TSharedPtr<IHttpRouter> CandidateRouter = HttpServerModule.GetHttpRouter(CandidatePort, true);
+        TSharedPtr<IHttpRouter> CandidateRouter = HttpServerModule.GetHttpRouter(CandidatePort);
         if (!CandidateRouter.IsValid())
         {
             WriteLog(TEXT("Skip port ") + FString::FromInt(static_cast<int32>(CandidatePort)) + TEXT(": router unavailable"));
@@ -309,8 +314,8 @@ FEngineWorkflowBridgeServer::FImportAssetResult FEngineWorkflowBridgeServer::Imp
         return Result;
     }
 
-    const FString SafeSubdirectory = NormalizeTargetSubdirectory(Item.TargetSubdirectory);
-    if (SafeSubdirectory.IsEmpty() && !Item.TargetSubdirectory.IsEmpty())
+    const FString SafeDestinationPath = NormalizeTargetSubdirectory(Item.TargetSubdirectory);
+    if (SafeDestinationPath.IsEmpty() && !Item.TargetSubdirectory.IsEmpty())
     {
         Result.Message = TEXT("targetSubdirectory is invalid");
         WriteLog(TEXT("ImportAudio failed: invalid targetSubdirectory=") + Item.TargetSubdirectory);
@@ -318,9 +323,9 @@ FEngineWorkflowBridgeServer::FImportAssetResult FEngineWorkflowBridgeServer::Imp
     }
 
     FString DestinationPath = TEXT("/Game/ArtAssets");
-    if (!SafeSubdirectory.IsEmpty())
+    if (!SafeDestinationPath.IsEmpty())
     {
-        DestinationPath /= SafeSubdirectory;
+        DestinationPath = SafeDestinationPath;
     }
     WriteLog(TEXT("ImportAudio dispatch source=") + Item.SourcePath + TEXT(" destination=") + DestinationPath + TEXT(" overwrite=") + (bOverwrite ? TEXT("true") : TEXT("false")));
 
@@ -353,13 +358,15 @@ FEngineWorkflowBridgeServer::FImportAssetResult FEngineWorkflowBridgeServer::Imp
 
     auto RunImportOnGameThread = [&Result, DestinationPath, FilesToImport, bOverwrite]()
     {
-        TStrongObjectPtr<UAutomatedAssetImportData> ImportData(NewObject<UAutomatedAssetImportData>());
+        UAutomatedAssetImportData *ImportData = NewObject<UAutomatedAssetImportData>();
+        ImportData->AddToRoot();
         ImportData->DestinationPath = DestinationPath;
         ImportData->bReplaceExisting = bOverwrite;
         ImportData->Filenames = FilesToImport;
 
         FAssetToolsModule &AssetToolsModule = FModuleManager::LoadModuleChecked<FAssetToolsModule>(TEXT("AssetTools"));
-        TArray<UObject *> ImportedAssets = AssetToolsModule.Get().ImportAssetsAutomated(ImportData.Get());
+        TArray<UObject *> ImportedAssets = AssetToolsModule.Get().ImportAssetsAutomated(ImportData);
+        ImportData->RemoveFromRoot();
         if (ImportedAssets.Num() == 0 || ImportedAssets[0] == nullptr)
         {
             Result.Message = TEXT("UE asset import did not return an asset");
@@ -486,29 +493,46 @@ FString FEngineWorkflowBridgeServer::NormalizeTargetSubdirectory(const FString &
 {
     FString Normalized = Input;
     Normalized.ReplaceInline(TEXT("\\"), TEXT("/"));
-    Normalized.RemoveFromStart(TEXT("/"));
     Normalized.RemoveFromEnd(TEXT("/"));
     if (Normalized.Contains(TEXT("..")))
     {
         return FString();
     }
 
+    if (Normalized.IsEmpty())
+    {
+        return FString();
+    }
+
     if (Normalized.StartsWith(TEXT("/Game/")))
     {
-        Normalized.RightChopInline(6, EAllowShrinking::No);
+        return Normalized;
     }
+
+    if (Normalized.StartsWith(TEXT("Game/")))
+    {
+        return TEXT("/") + Normalized;
+    }
+
+    const bool bAbsoluteProjectPath = Normalized.StartsWith(TEXT("/"));
+    Normalized.RemoveFromStart(TEXT("/"));
 
     if (Normalized.StartsWith(TEXT("WorkflowImports/")))
     {
-        Normalized.RightChopInline(16, EAllowShrinking::No);
+        return TEXT("/Game/") + Normalized;
     }
 
     if (Normalized.StartsWith(TEXT("ArtAssets/")))
     {
-        Normalized.RightChopInline(10, EAllowShrinking::No);
+        return TEXT("/Game/") + Normalized;
     }
 
-    return Normalized;
+    if (bAbsoluteProjectPath)
+    {
+        return TEXT("/Game/") + Normalized;
+    }
+
+    return TEXT("/Game/ArtAssets/") + Normalized;
 }
 
 TSharedRef<FJsonObject> FEngineWorkflowBridgeServer::SessionToJsonObject(const FSessionInfo &Session) const
